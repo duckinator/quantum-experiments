@@ -1,30 +1,39 @@
 #!/usr/bin/env python3
 
-import numpy as np
-from qiskit import Aer, QuantumCircuit, execute
-from qiskit.visualization import plot_histogram
-import matplotlib.pyplot as plt
+from qiskit import Aer, QuantumCircuit, IBMQ, execute
+from qiskit.tools.monitor import job_monitor
+
+def _pending_jobs(backend):
+    return backend.status().pending_jobs
+
+def _not_simulator(backend):
+    return 'simulator' not in backend.name()
+
+def best_ibmq_backend():
+    """Returns the actual-hardware IBMQ backend with the fewest pending jobs."""
+    provider = IBMQ.get_provider(hub='ibm-q')
+    return sorted(provider.backends(filters=_not_simulator), key=_pending_jobs)[0]
 
 
-qasm_simulator = Aer.get_backend('qasm_simulator')
+# Actual circuit.
+circuit = QuantumCircuit(1, 1)
+circuit.h(0)  # H operator results in an equal probability of 0 or 1.
+circuit.measure(0, 0)
 
-# Create a Quantum Circuit with 2 qubits and 2 cbits.
-circuit = QuantumCircuit(2, 2)
+# Connect to IBM Quantum and get the backend to use
+IBMQ.load_account()
+backend = best_ibmq_backend()
 
-circuit.h(0)        # add h gate on qubit 1
-circuit.cx(0, 1)    # add CX/CNOT gate on control qubit 0 and target qubit 1.
+# Run the job
+job = execute(circuit, backend, shots=1)
 
-# Map the quantum measurement to the classical bits
-circuit.measure([0, 1], [0, 1])
+job_monitor(job)
 
-job = execute(circuit, qasm_simulator, shots=1000)
-
+# Get the results.
 result = job.result()
 counts = result.get_counts(circuit)
 
-print("\nTotal count for 00 and 11 are:", counts)
-
-# Draw the circuit
-circuit.draw(output='mpl')
-plot_histogram(counts)
-plt.show()
+if list(counts.keys())[0] == '0':
+    print("heads")
+else:
+    print("tails")
