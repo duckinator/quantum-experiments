@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-from qiskit import Aer, QuantumCircuit, IBMQ, execute
+from qiskit import Aer, ClassicalRegister, QuantumRegister, QuantumCircuit, IBMQ, execute
 from qiskit.tools.monitor import job_monitor
 
 def _pending_jobs(backend):
@@ -21,30 +21,6 @@ def best_ibmq_backend(n_qubits):
         filters=lambda b: _not_simulator(b) and _has_enough_qubits(b, n_qubits)
     ), key=_pending_jobs)[0]
 
-
-def build_circuit(bits):
-    circuit = QuantumCircuit(bits, bits)
-    circuit.h(range(bits))  # H operator results in an equal probability of 0 or 1.
-    circuit.measure(range(bits), range(bits))
-
-    return circuit
-
-def run(circuit, backend, num_sides):
-    number = 0
-    for _ in range(10):
-        # Run the job
-        job = execute(circuit, backend, shots=1)
-        job_monitor(job)
-
-        # Get the results.
-        result = job.result()
-        counts = result.get_counts(circuit)
-
-        number = int(list(counts.keys())[0], 2)
-        if number in range(1, num_sides + 1):
-            return number
-    raise Exception("couldn't get valid die roll in 10 tries; giving up.")
-
 dice = 3
 sides = 6
 
@@ -55,8 +31,52 @@ if sys.argv[0] == "real":
 else:
     backend = Aer.get_backend('qasm_simulator')
 
-circuit = build_circuit(bits)
-numbers = [run(circuit, backend, sides) for _ in range(dice)]
+q = QuantumRegister(3, 'q')
+c = ClassicalRegister(3, 'c')
+circuit = QuantumCircuit(bits, bits)
+circuit.h(q[0])
+circuit.h(q[1])
+circuit.h(q[2])
+
+circuit.measure(q[0], c[0])
+circuit.measure(q[1], c[1])
+circuit.measure(q[2], c[2])
+
+circuit.reset(q[0]).c_if(c, 7)
+circuit.reset(q[1]).c_if(c, 7)
+circuit.reset(q[2]).c_if(c, 7)
+circuit.reset(q[0]).c_if(c, 0)
+circuit.reset(q[1]).c_if(c, 0)
+circuit.reset(q[2]).c_if(c, 0)
+
+circuit.measure(q[0], c[0])
+circuit.measure(q[1], c[1])
+circuit.measure(q[2], c[2])
+
+circuit.h(q[0]).c_if(c, 0)
+circuit.h(q[1]).c_if(c, 0)
+circuit.h(q[2]).c_if(c, 0)
+
+circuit.measure(q[0], c[0])
+circuit.measure(q[1], c[1])
+circuit.measure(q[2], c[2])
+
+# Run the job
+job = execute(circuit, backend, shots=1)
+job_monitor(job)
+
+# Get the results.
+result = job.result()
+counts = result.get_counts(circuit)
+
+print(counts)
+exit()
+
+#number = int(list(counts.keys())[0], 2)
+
+#circuit = build_circuit(bits)
+#numbers = [run(circuit, backend, sides) for _ in range(dice)]
+numbers = [number]
 
 print(
     f"{dice}d{sides} =",
